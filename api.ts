@@ -3,7 +3,7 @@ import { Issue, IssueStatus, Priority } from './types';
 import { LD_TEAM_TITLE } from './constants';
 
 const SHEET_ID = '1X3MlikMug_yu1x8hogFpwfT3_gSOmle4CSrBcDdnLds';
-const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx:out:csv`;
+const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
 // الرابط الأحدث الذي زودتنا به
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx7sbZiqAxSGcGIOqxVYnD8QR6-9vLbGxutKVMfvQWh-dJGsmiNZZ0X3Jj40t3iOxqBQQ/exec';
 
@@ -63,11 +63,17 @@ function parseCSV(csvText: string): Issue[] {
 export async function fetchIssues(): Promise<Issue[]> {
   try {
     const response = await fetch(CSV_URL, { cache: 'no-cache' });
-    if (response.ok) {
-      const text = await response.text();
-      return parseCSV(text);
+    const text = await response.text();
+    // quick sanity log when debugging (will appear in browser console)
+    if (!text || text.trim() === '') {
+      console.warn('fetchIssues: empty response from Sheet CSV');
+      return [];
     }
-    return [];
+    const parsed = parseCSV(text);
+    if (!parsed || parsed.length === 0) {
+      console.warn('fetchIssues: parsed CSV produced no rows; sample=', text.slice(0, 300));
+    }
+    return parsed;
   } catch (error) {
     console.error('Error fetching data from Sheet:', error);
     return [];
@@ -101,9 +107,8 @@ export async function submitIssue(issue: Partial<Issue>): Promise<boolean> {
 
     await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
-      mode: 'no-cors',
       cache: 'no-cache',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(payload)
     });
     
@@ -138,9 +143,8 @@ export async function updateIssueInSheet(issue: Issue): Promise<boolean> {
 
     await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
-      mode: 'no-cors',
       cache: 'no-cache',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(payload)
     });
 
