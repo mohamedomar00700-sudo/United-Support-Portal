@@ -5,6 +5,8 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     return {
+      // Base path for GitHub Pages. Adjust if you publish under a different repo name.
+      base: '/United-Support-Portal/',
       server: {
         port: 3000,
         host: '0.0.0.0',
