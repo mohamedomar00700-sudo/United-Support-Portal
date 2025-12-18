@@ -354,6 +354,17 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
                        </PieChart>
                      </ResponsiveContainer>
                    </div>
+                   <div className="w-full h-full">
+                     <ResponsiveContainer width="100%" height="100%">
+                       <BarChart data={analyticsData.categoryBar} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                         <CartesianGrid strokeDasharray="3 3" />
+                         <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                         <YAxis allowDecimals={false} />
+                         <Tooltip />
+                         <Bar dataKey="count" fill="#3FA9F5" onClick={(d:any) => { if (d && d.payload && d.payload.name) setFilterCategory(d.payload.name); }} />
+                       </BarChart>
+                     </ResponsiveContainer>
+                   </div>
                  </div>
 
                 <div className="mt-6">
@@ -371,20 +382,8 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
                     </table>
                   </div>
                 </div>
-                   <div className="w-full h-full">
-                     <ResponsiveContainer width="100%" height="100%">
-                       <BarChart data={analyticsData.categoryBar} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                         <CartesianGrid strokeDasharray="3 3" />
-                         <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                         <YAxis allowDecimals={false} />
-                         <Tooltip />
-                         <Bar dataKey="count" fill="#3FA9F5" onClick={(d:any) => { if (d && d.payload && d.payload.name) setFilterCategory(d.payload.name); }} />
-                       </BarChart>
-                     </ResponsiveContainer>
-                   </div>
-                 </div>
               </div>
-            {/* Additional analytics components can stay here */}
+              {/* Additional analytics components can stay here */}
           </div>
         )}
       </div>
