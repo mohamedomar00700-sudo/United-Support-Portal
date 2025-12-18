@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Issue, IssueStatus, Priority } from '../types';
 import { STATUS_COLORS, PRIORITY_COLORS, LD_TEAM_TITLE, ISSUE_CATEGORIES } from '../constants';
-import { Search, X, ChevronRight, RefreshCw, AlertTriangle, Clock, Settings, UserCheck, LayoutGrid, ZoomIn, Target, Phone, MessageSquare, Activity, Check, BarChart3, PieChart as PieIcon, TrendingUp, CheckCircle2 } from 'lucide-react';
+import { Search, X, ChevronRight, RefreshCw, AlertTriangle, Clock, Settings, LayoutGrid, ZoomIn, Phone, MessageSquare, Activity, Check, BarChart3, PieChart as PieIcon, TrendingUp, CheckCircle2, Filter, Zap, Calendar, ArrowLeftRight } from 'lucide-react';
 import { fetchIssues, updateIssueInSheet } from '../api';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
@@ -17,9 +17,11 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
   const [activeSubTab, setActiveSubTab] = useState<'LIST' | 'ANALYTICS'>('LIST');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<IssueStatus | ''>('');
-  const [filterCategory, setFilterCategory] = useState<string | ''>('');
+  const [filterPriority, setFilterPriority] = useState<Priority | ''>('');
+  const [filterCategory, setFilterCategory] = useState<string>('');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+  
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [viewerImage, setViewerImage] = useState<string | null>(null);
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -29,7 +31,6 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
   const [editStatus, setEditStatus] = useState<IssueStatus>('جديدة');
   const [editNotes, setEditNotes] = useState('');
   const [editResolvedAt, setEditResolvedAt] = useState('');
-  const [editAssignedTo, setEditAssignedTo] = useState(LD_TEAM_TITLE);
 
   const loadData = async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -42,7 +43,7 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(() => loadData(true), 25000); 
+    const interval = setInterval(() => loadData(true), 30000); 
     return () => clearInterval(interval);
   }, []);
 
@@ -51,7 +52,6 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
       setEditStatus(selectedIssue.status);
       setEditNotes(selectedIssue.resolutionNotes || '');
       setEditResolvedAt(selectedIssue.resolvedAt || '');
-      setEditAssignedTo(selectedIssue.assignedTo || LD_TEAM_TITLE);
     }
   }, [selectedIssue]);
 
@@ -72,25 +72,17 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
       ...selectedIssue,
       status: editStatus,
       resolutionNotes: editNotes,
-      resolvedAt: editResolvedAt,
-      assignedTo: editAssignedTo
+      resolvedAt: editResolvedAt
     };
     
-    // إرسال التحديث للشيت مباشرة
     const success = await updateIssueInSheet(updatedIssue);
     if (success) {
-      // إعادة تحميل البيانات من الشيت لضمان المزامنة
       await loadData(true);
       setSelectedIssue(null);
     } else {
-      // إظهار رسالة خطأ للمستخدم لمساعدة التشخيص
-      // لا نغلق المودال حتى يصلح المستخدم أو يحاول مرة أخرى
       try {
-        // حاول إظهار خطأ ناعم داخل الواجهة
-        // eslint-disable-next-line no-alert
         alert('حدث خطأ أثناء حفظ التحديث في جوجل شيت. يرجى التحقق من اتصال الشبكة أو إعدادات السكربت (CORS).');
       } catch (e) {
-        // fallback: console
         console.error('Save failed, and alert could not be shown', e);
       }
     }
@@ -118,6 +110,23 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
+  // دالة ذكية لمقارنة التواريخ
+  const isWithinDateRange = (dateStr: string) => {
+    if (!startDate && !endDate) return true;
+    try {
+      // محاولة تنظيف التاريخ القادم من جوجل (قد يحتوي على فواصل أو أوقات)
+      const cleanDate = new Date(dateStr.split(',')[0].split('/').reverse().join('-')); // تحويل من DD/MM/YYYY إلى YYYY-MM-DD
+      const start = startDate ? new Date(startDate) : null;
+      const end = endDate ? new Date(endDate) : null;
+      
+      if (start && cleanDate < start) return false;
+      if (end && cleanDate > end) return false;
+      return true;
+    } catch {
+      return true; 
+    }
+  };
+
   const analyticsData = useMemo(() => {
     const statusCounts = issues.reduce((acc, issue) => {
       acc[issue.status] = (acc[issue.status] || 0) + 1;
@@ -140,9 +149,9 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
     }));
 
     const categoryBar = Object.keys(categoryCounts).map(cat => ({
-      name: cat.length > 15 ? cat.substring(0, 15) + '..' : cat,
+      name: cat,
       count: categoryCounts[cat]
-    }));
+    })).sort((a, b) => b.count - a.count);
 
     const resolved = issues.filter(i => i.status === 'تم الحل').length;
     const total = issues.length;
@@ -151,7 +160,7 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
   }, [issues]);
 
   const topCategories = useMemo(() => {
-    return analyticsData.categoryBar.slice().sort((a,b) => b.count - a.count).slice(0,5);
+    return analyticsData.categoryBar.slice(0, 5);
   }, [analyticsData]);
 
   const categories = useMemo(() => {
@@ -188,83 +197,103 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
   }, [issues, analyticsData]);
 
   const filteredIssues = useMemo(() => {
-    const start = startDate ? new Date(startDate + 'T00:00:00') : null;
-    const end = endDate ? new Date(endDate + 'T23:59:59') : null;
     return issues.filter(issue => {
       const matchSearch = (issue.pharmacistName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
                           (issue.mobileNumber || '').includes(searchTerm) ||
                           (issue.id || '').includes(searchTerm);
       const matchStatus = !filterStatus || issue.status === filterStatus;
+      const matchPriority = !filterPriority || issue.priority === filterPriority;
       const matchCategory = !filterCategory || issue.category === filterCategory;
-
-      // date range filter
-      if ((start || end) && issue.createdAt) {
-        const dt = parseCreatedAt(issue.createdAt);
-        if (!dt) return false; // cannot parse date -> exclude
-        if (start && dt < start) return false;
-        if (end && dt > end) return false;
-      }
-
-      return matchSearch && matchStatus && matchCategory;
+      const matchDate = isWithinDateRange(issue.createdAt);
+      
+      return matchSearch && matchStatus && matchPriority && matchCategory && matchDate;
     });
-  }, [issues, searchTerm, filterStatus, filterCategory, startDate, endDate]);
+  }, [issues, searchTerm, filterStatus, filterPriority, filterCategory, startDate, endDate]);
 
   const COLORS = ['#3FA9F5', '#00A99D', '#F7941D', '#8B5CF6', '#EC4899'];
+
+  const handleBarClick = (data: any) => {
+    if (data && data.name) {
+      setFilterCategory(data.name);
+      setActiveSubTab('LIST');
+    }
+  };
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setFilterStatus('');
+    setFilterPriority('');
+    setFilterCategory('');
+    setStartDate('');
+    setEndDate('');
+  };
 
   if (loading) return (
     <div className={`flex flex-col items-center justify-center h-full w-full gap-8 ${isDarkMode ? 'bg-[#001030]' : 'bg-[#F8FAFC]'}`}>
       <div className="w-16 h-16 border-4 border-[#3FA9F5]/20 border-t-[#3FA9F5] rounded-full animate-spin"></div>
-      <p className="font-bold tracking-widest text-xs uppercase opacity-60">جاري التحميل من جوجل شيت..</p>
+      <p className="font-bold tracking-widest text-xs uppercase opacity-60">تحديث البيانات التحليلية..</p>
     </div>
   );
 
   return (
     <div className="h-full w-full flex flex-col md:flex-row overflow-hidden relative">
-      <aside className={`w-full md:w-80 lg:w-96 border-l p-6 md:p-10 flex flex-col gap-8 shrink-0 z-20 transition-all ${isDarkMode ? 'bg-[#001a4d] border-white/5' : 'bg-white border-gray-100 shadow-xl'}`}>
+      <aside className={`w-full md:w-80 lg:w-96 border-l p-6 md:p-10 flex flex-col gap-5 shrink-0 z-20 transition-all ${isDarkMode ? 'bg-[#001a4d] border-white/5' : 'bg-white border-gray-100 shadow-xl'}`}>
         <div className="flex justify-between items-center">
            <h3 className="font-bold flex items-center gap-3 text-lg md:text-xl">
-            <Settings size={20} className="text-[#3FA9F5]" /> الإدارة
+            <Settings size={20} className="text-[#3FA9F5]" /> الفلاتر الذكية
           </h3>
-          <button onClick={() => loadData()} className={`p-2 rounded-xl transition-all ${refreshing ? 'animate-spin text-[#3FA9F5]' : 'opacity-40 hover:opacity-100'}`}>
-            <RefreshCw size={20}/>
-          </button>
+          <button onClick={clearFilters} className="text-[10px] font-black text-red-400 hover:underline uppercase">إعادة تعيين</button>
         </div>
 
         <div className={`p-1 rounded-2xl flex border ${isDarkMode ? 'bg-black/20 border-white/5' : 'bg-gray-50 border-gray-100'}`}>
-           <button onClick={() => setActiveSubTab('LIST')} className={`flex-1 py-3 text-xs font-black rounded-xl transition-all ${activeSubTab === 'LIST' ? (isDarkMode ? 'bg-[#3FA9F5] text-white shadow-lg' : 'bg-white text-[#002060] shadow-sm') : 'text-gray-400'}`}>البلاغات</button>
-           <button onClick={() => setActiveSubTab('ANALYTICS')} className={`flex-1 py-3 text-xs font-black rounded-xl transition-all ${activeSubTab === 'ANALYTICS' ? (isDarkMode ? 'bg-[#3FA9F5] text-white shadow-lg' : 'bg-white text-[#002060] shadow-sm') : 'text-gray-400'}`}>الإحصائيات</button>
+           <button onClick={() => setActiveSubTab('LIST')} className={`flex-1 py-3 text-xs font-black rounded-xl transition-all ${activeSubTab === 'LIST' ? (isDarkMode ? 'bg-[#3FA9F5] text-white shadow-lg' : 'bg-white text-[#002060] shadow-sm') : 'text-gray-400'}`}>الجدول</button>
+           <button onClick={() => setActiveSubTab('ANALYTICS')} className={`flex-1 py-3 text-xs font-black rounded-xl transition-all ${activeSubTab === 'ANALYTICS' ? (isDarkMode ? 'bg-[#3FA9F5] text-white shadow-lg' : 'bg-white text-[#002060] shadow-sm') : 'text-gray-400'}`}>التحليل</button>
         </div>
         
-        <div className="space-y-6">
+        <div className="space-y-4 overflow-y-auto pr-1 flex-1">
           <div className="relative">
             <Search className="absolute right-4 top-3.5 w-4 h-4 text-gray-400" />
-            <input type="text" placeholder="بحث.." className={`w-full pr-11 py-3.5 border rounded-2xl text-sm font-bold outline-none transition-all ${isDarkMode ? 'bg-black/20 border-white/10 focus:border-[#3FA9F5]' : 'bg-gray-50 border-gray-100 focus:border-[#002060]'}`} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            <input type="text" placeholder="بحث عام.." className={`w-full pr-11 py-3 border rounded-2xl text-xs font-bold outline-none transition-all ${isDarkMode ? 'bg-black/20 border-white/10 focus:border-[#3FA9F5]' : 'bg-gray-50 border-gray-100 focus:border-[#002060]'}`} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
           </div>
-          <div className="flex gap-2">
-            <select value={filterCategory} onChange={e => setFilterCategory(e.target.value as string)} className={`flex-1 p-3 rounded-2xl text-sm font-black outline-none ${isDarkMode ? 'bg-black/20 border-white/10' : 'bg-gray-50 border-gray-100'}`}>
-              <option value="">كل الأنواع</option>
-              {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-            </select>
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value as IssueStatus | '')} className={`w-40 p-3 rounded-2xl text-sm font-black outline-none ${isDarkMode ? 'bg-black/20 border-white/10' : 'bg-gray-50 border-gray-100'}`}>
-              <option value="">كل الحالات</option>
-              {['جديدة', 'تحت المعالجة', 'بانتظار رد الصيدلي', 'تم الحل'].map(s => <option key={s} value={s}>{s}</option>)}
+
+          <div className="space-y-1">
+            <label className="text-[9px] font-black opacity-40 px-2 uppercase tracking-widest flex items-center gap-1"><Filter size={10}/> النوع</label>
+            <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} className={`w-full px-4 py-2.5 rounded-xl text-[11px] font-bold outline-none ${isDarkMode ? 'bg-black/20 border-white/10' : 'bg-gray-50 border-gray-100'}`}>
+              <option value="">جميع الأنواع</option>
+              {ISSUE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
-          <div className="flex gap-2 mt-2">
-            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={`flex-1 p-3 rounded-2xl text-sm font-black outline-none ${isDarkMode ? 'bg-black/20 border-white/10' : 'bg-gray-50 border-gray-100'}`} />
-            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={`w-40 p-3 rounded-2xl text-sm font-black outline-none ${isDarkMode ? 'bg-black/20 border-white/10' : 'bg-gray-50 border-gray-100'}`} />
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <label className="text-[9px] font-black opacity-40 px-2 uppercase tracking-widest">الحالة</label>
+              <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as any)} className={`w-full px-4 py-2.5 rounded-xl text-[11px] font-bold outline-none ${isDarkMode ? 'bg-black/20 border-white/10' : 'bg-gray-50 border-gray-100'}`}>
+                <option value="">الكل</option>
+                {['جديدة', 'تحت المعالجة', 'بانتظار رد الصيدلي', 'تم الحل'].map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[9px] font-black opacity-40 px-2 uppercase tracking-widest">الأولوية</label>
+              <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value as any)} className={`w-full px-4 py-2.5 rounded-xl text-[11px] font-bold outline-none ${isDarkMode ? 'bg-black/20 border-white/10' : 'bg-gray-50 border-gray-100'}`}>
+                <option value="">الكل</option>
+                {['عاجل', 'متوسط', 'عادي'].map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-white/5 space-y-3">
+             <div className="flex items-center gap-2 text-[10px] font-black opacity-40 uppercase tracking-widest px-2"><Calendar size={12}/> نطاق التاريخ</div>
+             <div className="space-y-2">
+               <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={`w-full px-4 py-2 rounded-xl text-[11px] font-bold outline-none ${isDarkMode ? 'bg-black/20 border-white/10' : 'bg-gray-50 border-gray-100'}`} />
+               <div className="flex justify-center opacity-20"><ArrowLeftRight size={12} className="rotate-90"/></div>
+               <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={`w-full px-4 py-2 rounded-xl text-[11px] font-bold outline-none ${isDarkMode ? 'bg-black/20 border-white/10' : 'bg-gray-50 border-gray-100'}`} />
+             </div>
           </div>
         </div>
 
-        <div className="mt-auto p-6 rounded-3xl bg-gradient-to-br from-[#00A99D]/10 to-[#3FA9F5]/10 border border-[#3FA9F5]/10">
-           <div className="flex items-center gap-3 mb-2">
-             <TrendingUp size={20} className="text-[#00A99D]" />
-             <span className="text-xs font-black opacity-60">نسبة الإنجاز</span>
-           </div>
-           <p className="text-2xl font-black">{stats.percentage}%</p>
-           <div className="w-full bg-gray-200 dark:bg-white/10 h-1.5 rounded-full mt-2 overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-[#00A99D] to-[#3FA9F5]" style={{ width: `${stats.percentage}%` }}></div>
-           </div>
+        <div className="p-5 rounded-3xl bg-gradient-to-br from-[#00A99D]/10 to-[#3FA9F5]/10 border border-[#3FA9F5]/10 text-center">
+           <p className="text-2xl font-black">{filteredIssues.length}</p>
+           <p className="text-[9px] font-black opacity-40 uppercase tracking-widest mt-1">بلاغ مطابق للفلاتر</p>
         </div>
       </aside>
 
@@ -289,101 +318,114 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
         {activeSubTab === 'LIST' ? (
           <div className={`rounded-[2.5rem] border overflow-hidden transition-all animate-in fade-in duration-500 ${isDarkMode ? 'bg-[#001a4d] border-white/5' : 'bg-white border-gray-100 shadow-2xl'}`}>
              <div className="p-8 flex justify-between items-center border-b border-white/5">
-                <h4 className="font-black text-xl flex items-center gap-3"><Activity className="text-[#00A99D]" /> سجل البلاغات الموحد</h4>
-                <div className="flex items-center gap-2">
-                   <div className="w-2 h-2 rounded-full bg-[#00A99D] animate-ping"></div>
-                   <span className="text-[10px] font-black opacity-40">تحديث تلقائي</span>
-                </div>
+                <h4 className="font-black text-xl flex items-center gap-3"><Activity className="text-[#00A99D]" /> سجل المتابعة</h4>
+                {filterCategory && (
+                  <div className="flex items-center gap-2 bg-[#3FA9F5]/10 text-[#3FA9F5] px-4 py-1.5 rounded-full">
+                    <span className="text-xs font-black">نوع: {filterCategory}</span>
+                    <button onClick={() => setFilterCategory('')}><X size={14}/></button>
+                  </div>
+                )}
              </div>
              <div className="overflow-x-auto">
                <table className="w-full text-right text-sm">
                  <thead className={`text-[11px] font-black uppercase tracking-widest ${isDarkMode ? 'bg-black/20 text-white/30' : 'bg-gray-50 text-gray-400'}`}>
                    <tr>
-                     <th className="px-8 py-5">الصيدلي</th>
+                     <th className="px-8 py-5">صاحب البلاغ</th>
                      <th className="px-8 py-5">المشكلة</th>
                      <th className="px-8 py-5 text-center">الحالة</th>
-                     <th className="px-8 py-5 text-center">واتساب</th>
-                     <th className="px-8 py-5 text-center">إجراء</th>
+                     <th className="px-8 py-5 text-center">تواصل</th>
+                     <th className="px-8 py-5 text-center">تفاصيل</th>
                    </tr>
                  </thead>
                  <tbody className="divide-y divide-white/5">
-                   {filteredIssues.map(issue => (
+                   {filteredIssues.length > 0 ? filteredIssues.map(issue => (
                      <tr key={issue.id} className={`hover:bg-white/5 transition-all cursor-pointer group`} onClick={() => setSelectedIssue(issue)}>
                        <td className="px-8 py-6">
                          <div className="font-bold text-base">{issue.pharmacistName}</div>
                          <div className="text-[11px] opacity-40 flex items-center gap-2"><Phone size={10} /> {issue.mobileNumber}</div>
                        </td>
                        <td className="px-8 py-6">
-                         <div className={`text-[11px] font-black px-3 py-1 rounded-lg w-fit mb-1 ${isDarkMode ? 'bg-white/5 text-white/60' : 'bg-gray-100 text-gray-500'}`}>{issue.lmsEmail}</div>
-                         <div className="text-[12px] opacity-60">{issue.category}</div>
+                         <div className={`text-[10px] font-black px-3 py-1 rounded-lg w-fit mb-1 ${PRIORITY_COLORS[issue.priority]}`}>{issue.priority}</div>
+                         <div className="text-[12px] opacity-60 font-bold">{issue.category}</div>
                        </td>
                        <td className="px-8 py-6 text-center">
                          <span className={`px-4 py-2 rounded-xl text-[10px] font-black border ${STATUS_COLORS[issue.status]}`}>{issue.status}</span>
                        </td>
                        <td className="px-8 py-6 text-center">
-                         <button 
-                           onClick={(e) => { e.stopPropagation(); openWhatsApp(issue, 'CHAT'); }} 
-                           className="p-3 bg-emerald-500/10 text-emerald-500 rounded-2xl hover:bg-emerald-500 hover:text-white transition-all whatsapp-glow"
-                         >
-                           <MessageSquare size={18} fill="currentColor" fillOpacity={0.2} />
-                         </button>
+                         <button onClick={(e) => { e.stopPropagation(); openWhatsApp(issue, 'CHAT'); }} className="p-3 bg-emerald-500/10 text-emerald-500 rounded-2xl hover:bg-emerald-500 hover:text-white transition-all whatsapp-glow"><MessageSquare size={18} fill="currentColor" fillOpacity={0.2} /></button>
                        </td>
                        <td className="px-8 py-6 text-center">
                           <ChevronRight className="mx-auto text-gray-300 group-hover:text-[#3FA9F5] transition-all" />
                        </td>
                      </tr>
-                   ))}
+                   )) : (
+                     <tr><td colSpan={5} className="py-20 text-center text-gray-400 font-bold">لا توجد نتائج مطابقة لخيارات الفلترة</td></tr>
+                   )}
                  </tbody>
                </table>
              </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
-            {/* Analytics Widgets */}
+            {/* Pie Chart */}
             <div className={`p-8 rounded-[2.5rem] border ${isDarkMode ? 'bg-[#001a4d] border-white/5' : 'bg-white border-gray-100 shadow-xl'}`}>
-                 <h4 className="font-black text-lg mb-8 flex items-center gap-3"><PieIcon className="text-[#3FA9F5]" /> تحليل الحالات</h4>
-                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[300px]">
-                   <div className="w-full h-full">
-                     <ResponsiveContainer width="100%" height="100%">
-                       <PieChart>
-                         <Pie data={analyticsData.statusPie} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={5} dataKey="value">
-                           {analyticsData.statusPie.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                         </Pie>
-                         <Tooltip contentStyle={{ borderRadius: '15px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 'bold' }} />
-                         <Legend verticalAlign="bottom" height={36}/>
-                       </PieChart>
-                     </ResponsiveContainer>
-                   </div>
-                   <div className="w-full h-full">
-                     <ResponsiveContainer width="100%" height="100%">
-                       <BarChart data={analyticsData.categoryBar} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                         <CartesianGrid strokeDasharray="3 3" />
-                         <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                         <YAxis allowDecimals={false} />
-                         <Tooltip />
-                         <Bar dataKey="count" fill="#3FA9F5" onClick={(d:any) => { if (d && d.payload && d.payload.name) setFilterCategory(d.payload.name); }} />
-                       </BarChart>
-                     </ResponsiveContainer>
-                   </div>
-                 </div>
+               <h4 className="font-black text-lg mb-8 flex items-center gap-3"><PieIcon className="text-[#3FA9F5]" /> تحليل الحالات</h4>
+               <div className="h-[300px] w-full">
+                 <ResponsiveContainer width="100%" height="100%">
+                   <PieChart>
+                     <Pie data={analyticsData.statusPie} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={5} dataKey="value">
+                       {analyticsData.statusPie.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                     </Pie>
+                     <Tooltip contentStyle={{ borderRadius: '15px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 'bold' }} />
+                     <Legend verticalAlign="bottom" height={36}/>
+                   </PieChart>
+                 </ResponsiveContainer>
+               </div>
+            </div>
 
-                <div className="mt-6">
-                  <h5 className="font-black mb-3">أكثر 5 أنواع تكراراً</h5>
-                  <div className={`rounded-2xl p-4 ${isDarkMode ? 'bg-black/20' : 'bg-gray-50'}`}>
-                    <table className="w-full text-right text-sm">
-                      <thead className="text-xs opacity-60">
-                        <tr><th className="px-3 py-2">النوع</th><th className="px-3 py-2">العدد</th></tr>
-                      </thead>
-                      <tbody>
-                        {topCategories.map((c, i) => (
-                          <tr key={c.name} className="border-t"><td className="px-3 py-2 font-bold">{c.name}</td><td className="px-3 py-2">{c.count}</td></tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-              {/* Additional analytics components can stay here */}
+            {/* Drill-down Bar Chart */}
+            <div className={`p-8 rounded-[2.5rem] border ${isDarkMode ? 'bg-[#001a4d] border-white/5' : 'bg-white border-gray-100 shadow-xl'}`}>
+               <h4 className="font-black text-lg mb-2 flex items-center gap-3"><BarChart3 className="text-[#00A99D]" /> أنواع المشكلات</h4>
+               <p className="text-[10px] font-bold opacity-40 mb-6 uppercase tracking-wider">اضغط على العمود لعرض البلاغات</p>
+               <div className="h-[300px] w-full">
+                 <ResponsiveContainer width="100%" height="100%">
+                   <BarChart data={analyticsData.categoryBar} layout="vertical">
+                     <CartesianGrid strokeDasharray="3 3" horizontal={false} opacity={0.1} />
+                     <XAxis type="number" hide />
+                     <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 9, fontWeight: 'bold' }} />
+                     <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: '15px', border: 'none', fontWeight: 'bold' }} />
+                     <Bar 
+                        dataKey="count" 
+                        fill="#3FA9F5" 
+                        radius={[0, 10, 10, 0]} 
+                        onClick={handleBarClick}
+                        className="cursor-pointer hover:opacity-80 transition-all"
+                     />
+                   </BarChart>
+                 </ResponsiveContainer>
+               </div>
+            </div>
+
+            {/* Top-N Categories Table */}
+            <div className={`p-8 rounded-[2.5rem] border lg:col-span-2 ${isDarkMode ? 'bg-[#001a4d] border-white/5' : 'bg-white border-gray-100 shadow-xl'}`}>
+               <h4 className="font-black text-lg mb-8 flex items-center gap-3"><TrendingUp className="text-[#F7941D]" /> ملخص تكرار المشكلات (Top Analysis)</h4>
+               <div className="space-y-6">
+                  {topCategories.map((cat, i) => {
+                    const percentage = Math.round((cat.count / stats.total) * 100);
+                    return (
+                      <div key={i} className="space-y-2">
+                        <div className="flex justify-between items-center text-xs font-black">
+                           <span className="opacity-80">{cat.name}</span>
+                           <span className="text-[#3FA9F5]">{cat.count} بلاغ ({percentage}%)</span>
+                        </div>
+                        <div className="w-full h-3 bg-gray-100 dark:bg-white/5 rounded-full overflow-hidden">
+                           <div className="h-full bg-gradient-to-r from-[#00A99D] to-[#3FA9F5] shadow-lg" style={{ width: `${percentage}%` }}></div>
+                        </div>
+                      </div>
+                    )
+                  })}
+               </div>
+            </div>
           </div>
         )}
       </div>
@@ -391,24 +433,22 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
       {selectedIssue && (
         <div className="fixed inset-0 z-[100] flex justify-end">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setSelectedIssue(null)}></div>
-          <div className={`relative w-full max-w-xl h-full shadow-2xl flex flex-col p-10 transition-all ${isDarkMode ? 'bg-[#001a4d] border-r border-white/5' : 'bg-white'}`}>
+          <div className={`relative w-full max-w-xl h-full shadow-2xl flex flex-col p-8 md:p-12 transition-all ${isDarkMode ? 'bg-[#001a4d] border-r border-white/5' : 'bg-white'}`}>
              <div className="flex justify-between items-center mb-10 pb-5 border-b border-white/5">
-                <h3 className="text-2xl font-black">تفاصيل البلاغ</h3>
+                <div>
+                   <h3 className="text-2xl font-black">إدارة الحالة</h3>
+                   <p className="text-[11px] opacity-40 font-mono mt-1">Ref ID: {selectedIssue.id}</p>
+                </div>
                 <button onClick={() => setSelectedIssue(null)} className="p-2 hover:bg-white/10 rounded-full transition-all text-gray-400"><X size={28} /></button>
              </div>
              
              <div className="flex flex-col gap-4 mb-10">
-                <button 
-                  onClick={() => openWhatsApp(selectedIssue, 'CHAT')} 
-                  className="w-full bg-[#25D366] text-white py-6 rounded-[2.5rem] font-black text-xl flex items-center justify-center gap-4 shadow-xl hover:scale-[1.02] transition-all border-b-4 border-green-700 whatsapp-glow"
-                >
-                  <MessageSquare size={28} fill="white" /> تواصل عبر الواتساب
-                </button>
+                <button onClick={() => openWhatsApp(selectedIssue, 'CHAT')} className="w-full bg-[#25D366] text-white py-6 rounded-[2.5rem] font-black text-xl flex items-center justify-center gap-4 shadow-xl hover:scale-[1.02] transition-all border-b-4 border-green-700 whatsapp-glow"><MessageSquare size={28} fill="white" /> محادثة واتساب فورية</button>
              </div>
 
              <div className="space-y-8 flex-1 overflow-y-auto pr-2">
                 <div className={`p-6 rounded-3xl border-r-8 border-[#3FA9F5] shadow-sm ${isDarkMode ? 'bg-black/20' : 'bg-gray-50'}`}>
-                  <p className="text-[11px] font-black opacity-40 uppercase mb-2">الوصف:</p>
+                  <p className="text-[11px] font-black opacity-40 uppercase mb-2">وصف المشكلة:</p>
                   <p className="font-bold text-lg leading-relaxed italic">"{selectedIssue.description}"</p>
                 </div>
 
@@ -419,15 +459,15 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
                        {['جديدة', 'تحت المعالجة', 'بانتظار رد الصيدلي', 'تم الحل'].map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-black opacity-40 uppercase px-2">المسؤول</label>
-                    <div className={`w-full p-4 rounded-2xl font-black text-sm opacity-50 ${isDarkMode ? 'bg-black/10' : 'bg-gray-100'}`}>{LD_TEAM_TITLE}</div>
+                  <div className="space-y-2 text-center">
+                    <label className="text-[11px] font-black opacity-40 uppercase px-2">تاريخ البلاغ</label>
+                    <div className="p-4 rounded-2xl font-mono text-[10px] opacity-60">{selectedIssue.createdAt}</div>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[11px] font-black opacity-40 uppercase px-2">ملاحظات فريق العمل</label>
-                  <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={4} className={`w-full p-5 rounded-3xl font-bold text-sm outline-none transition-all ${isDarkMode ? 'bg-black/30 border-white/10' : 'bg-gray-50 border-gray-100'}`} placeholder="اكتب ملاحظات الحل.."></textarea>
+                  <label className="text-[11px] font-black opacity-40 uppercase px-2">ملاحظات الحل</label>
+                  <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={4} className={`w-full p-5 rounded-3xl font-bold text-sm outline-none transition-all ${isDarkMode ? 'bg-black/30 border-white/10' : 'bg-gray-50 border-gray-100'}`} placeholder="اكتب ردك التقني هنا.."></textarea>
                 </div>
                 
                 {selectedIssue.screenshot && (
@@ -444,17 +484,17 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
              </div>
 
              <div className="mt-8 pt-8 border-t border-white/5 flex gap-4">
-                <button onClick={processSave} className="flex-[2] bg-gradient-to-r from-[#00A99D] to-[#3FA9F5] text-white font-black py-5 rounded-3xl text-xl shadow-xl transition-all active:scale-95">حفظ في جوجل شيت</button>
-                <button onClick={() => setSelectedIssue(null)} className={`flex-1 font-bold py-5 rounded-3xl ${isDarkMode ? 'bg-white/5 hover:bg-white/10 text-gray-400' : 'bg-gray-100 hover:bg-gray-200'}`}>إلغاء</button>
+                <button onClick={processSave} className="flex-[2] bg-gradient-to-r from-[#00A99D] to-[#3FA9F5] text-white font-black py-5 rounded-3xl text-xl shadow-xl transition-all active:scale-95">حفظ التغييرات</button>
+                <button onClick={() => setSelectedIssue(null)} className={`flex-1 font-bold py-5 rounded-3xl ${isDarkMode ? 'bg-white/5 hover:bg-white/10 text-gray-400' : 'bg-gray-100 hover:bg-gray-200'}`}>إغلاق</button>
              </div>
           </div>
         </div>
       )}
 
       {viewerImage && (
-        <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4" onClick={() => setViewerImage(null)}>
-           <button className="absolute top-10 right-10 text-white p-2 bg-white/10 rounded-full hover:bg-white/20 transition-all"><X size={32} /></button>
-           <img src={viewerImage} className="max-w-full max-h-full rounded-2xl shadow-2xl" />
+        <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4 md:p-10" onClick={() => setViewerImage(null)}>
+           <button className="absolute top-10 right-10 text-white p-3 bg-white/10 rounded-full transition-all"><X size={32} /></button>
+           <img src={viewerImage} className="max-w-full max-h-full rounded-2xl shadow-2xl animate-in zoom-in duration-300" />
         </div>
       )}
     </div>
