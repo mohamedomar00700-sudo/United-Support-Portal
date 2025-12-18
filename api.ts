@@ -141,14 +141,28 @@ export async function updateIssueInSheet(issue: Issue): Promise<boolean> {
       resolutionNotes: issue.resolutionNotes
     };
 
-    await fetch(APPS_SCRIPT_URL, {
+    const resp = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
       cache: 'no-cache',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(payload)
     });
 
-    return true;
+    if (!resp.ok) {
+      console.error('updateIssueInSheet: non-ok response', resp.status, resp.statusText);
+      return false;
+    }
+
+    // Try to parse JSON response from Apps Script. If it's not JSON, treat as failure.
+    try {
+      const json = await resp.json();
+      if (json && (json.success === true || json.action === 'UPDATE')) return true;
+      console.error('updateIssueInSheet: script returned error', json);
+      return false;
+    } catch (e) {
+      console.error('updateIssueInSheet: failed to parse JSON response', e);
+      return false;
+    }
   } catch (error) {
     console.error('Update Error:', error);
     return false; 

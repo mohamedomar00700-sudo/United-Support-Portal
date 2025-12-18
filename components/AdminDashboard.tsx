@@ -79,6 +79,17 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
       // إعادة تحميل البيانات من الشيت لضمان المزامنة
       await loadData(true);
       setSelectedIssue(null);
+    } else {
+      // إظهار رسالة خطأ للمستخدم لمساعدة التشخيص
+      // لا نغلق المودال حتى يصلح المستخدم أو يحاول مرة أخرى
+      try {
+        // حاول إظهار خطأ ناعم داخل الواجهة
+        // eslint-disable-next-line no-alert
+        alert('حدث خطأ أثناء حفظ التحديث في جوجل شيت. يرجى التحقق من اتصال الشبكة أو إعدادات السكربت (CORS).');
+      } catch (e) {
+        // fallback: console
+        console.error('Save failed, and alert could not be shown', e);
+      }
     }
     setRefreshing(false);
   };
