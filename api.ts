@@ -105,14 +105,27 @@ export async function submitIssue(issue: Partial<Issue>): Promise<boolean> {
       resolutionNotes: ''
     };
 
-    await fetch(APPS_SCRIPT_URL, {
+    // Send as application/x-www-form-urlencoded to avoid CORS preflight
+    const params = new URLSearchParams();
+    Object.entries(payload).forEach(([k, v]) => params.append(k, String(v ?? '')));
+
+    const resp = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
       cache: 'no-cache',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(payload)
+      body: params
     });
-    
-    return true;
+
+    // Best-effort: parse JSON if available
+    try {
+      if (resp.ok) {
+        const json = await resp.json().catch(() => null);
+        return json ? (json.success === true || json.action === 'INSERT') : true;
+      }
+      return false;
+    } catch (e) {
+      console.error('Submit Error parsing response:', e);
+      return false;
+    }
   } catch (error) {
     console.error('Submit Error:', error);
     return false; 
@@ -141,11 +154,13 @@ export async function updateIssueInSheet(issue: Issue): Promise<boolean> {
       resolutionNotes: issue.resolutionNotes
     };
 
+    // Send as application/x-www-form-urlencoded to avoid preflight OPTIONS
+    const params = new URLSearchParams();
+    Object.entries(payload).forEach(([k, v]) => params.append(k, String(v ?? '')));
     const resp = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
       cache: 'no-cache',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(payload)
+      body: params
     });
 
     if (!resp.ok) {
