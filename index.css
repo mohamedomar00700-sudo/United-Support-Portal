@@ -1,0 +1,6 @@
+/* Minimal site CSS copied to production to avoid 404 for index.css */
+:root{
+  --body-bg: #f8fafc;
+}
+html,body,#root{height:100%;}
+body{background:var(--body-bg);margin:0;font-family: 'Tajawal', sans-serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
