@@ -17,6 +17,7 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
   const [activeSubTab, setActiveSubTab] = useState<'LIST' | 'ANALYTICS'>('LIST');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<IssueStatus | ''>('');
+  const [filterCategory, setFilterCategory] = useState<string | ''>('');
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [viewerImage, setViewerImage] = useState<string | null>(null);
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -147,6 +148,12 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
     return { statusPie, categoryBar, priorityCounts, resolved, total };
   }, [issues]);
 
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    issues.forEach(i => { if (i.category) set.add(i.category); });
+    return Array.from(set).sort();
+  }, [issues]);
+
   const stats = useMemo(() => {
     const resolved = analyticsData.resolved;
     const totalCount = analyticsData.total;
@@ -165,7 +172,8 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
                           (issue.mobileNumber || '').includes(searchTerm) ||
                           (issue.id || '').includes(searchTerm);
       const matchStatus = !filterStatus || issue.status === filterStatus;
-      return matchSearch && matchStatus;
+      const matchCategory = !filterCategory || issue.category === filterCategory;
+      return matchSearch && matchStatus && matchCategory;
     });
   }, [issues, searchTerm, filterStatus]);
 
@@ -199,6 +207,16 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
           <div className="relative">
             <Search className="absolute right-4 top-3.5 w-4 h-4 text-gray-400" />
             <input type="text" placeholder="بحث.." className={`w-full pr-11 py-3.5 border rounded-2xl text-sm font-bold outline-none transition-all ${isDarkMode ? 'bg-black/20 border-white/10 focus:border-[#3FA9F5]' : 'bg-gray-50 border-gray-100 focus:border-[#002060]'}`} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+          </div>
+          <div className="flex gap-2">
+            <select value={filterCategory} onChange={e => setFilterCategory(e.target.value as string)} className={`flex-1 p-3 rounded-2xl text-sm font-black outline-none ${isDarkMode ? 'bg-black/20 border-white/10' : 'bg-gray-50 border-gray-100'}`}>
+              <option value="">كل الأنواع</option>
+              {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+            </select>
+            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value as IssueStatus | '')} className={`w-40 p-3 rounded-2xl text-sm font-black outline-none ${isDarkMode ? 'bg-black/20 border-white/10' : 'bg-gray-50 border-gray-100'}`}>
+              <option value="">كل الحالات</option>
+              {['جديدة', 'تحت المعالجة', 'بانتظار رد الصيدلي', 'تم الحل'].map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
           </div>
         </div>
 
@@ -287,19 +305,32 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
             {/* Analytics Widgets */}
             <div className={`p-8 rounded-[2.5rem] border ${isDarkMode ? 'bg-[#001a4d] border-white/5' : 'bg-white border-gray-100 shadow-xl'}`}>
-               <h4 className="font-black text-lg mb-8 flex items-center gap-3"><PieIcon className="text-[#3FA9F5]" /> تحليل الحالات</h4>
-               <div className="h-[300px] w-full">
-                 <ResponsiveContainer width="100%" height="100%">
-                   <PieChart>
-                     <Pie data={analyticsData.statusPie} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={5} dataKey="value">
-                       {analyticsData.statusPie.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
-                     </Pie>
-                     <Tooltip contentStyle={{ borderRadius: '15px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 'bold' }} />
-                     <Legend verticalAlign="bottom" height={36}/>
-                   </PieChart>
-                 </ResponsiveContainer>
-               </div>
-            </div>
+                 <h4 className="font-black text-lg mb-8 flex items-center gap-3"><PieIcon className="text-[#3FA9F5]" /> تحليل الحالات</h4>
+                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[300px]">
+                   <div className="w-full h-full">
+                     <ResponsiveContainer width="100%" height="100%">
+                       <PieChart>
+                         <Pie data={analyticsData.statusPie} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={5} dataKey="value">
+                           {analyticsData.statusPie.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                         </Pie>
+                         <Tooltip contentStyle={{ borderRadius: '15px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 'bold' }} />
+                         <Legend verticalAlign="bottom" height={36}/>
+                       </PieChart>
+                     </ResponsiveContainer>
+                   </div>
+                   <div className="w-full h-full">
+                     <ResponsiveContainer width="100%" height="100%">
+                       <BarChart data={analyticsData.categoryBar} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                         <CartesianGrid strokeDasharray="3 3" />
+                         <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                         <YAxis allowDecimals={false} />
+                         <Tooltip />
+                         <Bar dataKey="count" fill="#3FA9F5" />
+                       </BarChart>
+                     </ResponsiveContainer>
+                   </div>
+                 </div>
+              </div>
             {/* Additional analytics components can stay here */}
           </div>
         )}
