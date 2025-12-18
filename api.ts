@@ -4,8 +4,8 @@ import { LD_TEAM_TITLE } from './constants';
 
 const SHEET_ID = '1X3MlikMug_yu1x8hogFpwfT3_gSOmle4CSrBcDdnLds';
 const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
-// الرابط الأحدث الذي زودتنا به
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx7sbZiqAxSGcGIOqxVYnD8QR6-9vLbGxutKVMfvQWh-dJGsmiNZZ0X3Jj40t3iOxqBQQ/exec';
+// Apps Script endpoint (updated)
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwaD4JMTdxOirowPnc7BwsJrOk6Yt1vICO22-jEoWyO0RRzFTNffWGTvcQg1AUTMx1AfQ/exec';
 
 function parseCSV(csvText: string): Issue[] {
   if (!csvText || csvText.trim() === "") return [];
