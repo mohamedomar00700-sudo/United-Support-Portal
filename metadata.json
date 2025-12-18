@@ -1,0 +1,7 @@
+{
+  "name": "United Support Portal",
+  "description": "النظام الرسمي الموحد لاستقبال ومعالجة بلاغات التدريب والتطوير لصيادلة شركة المتحدة.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
