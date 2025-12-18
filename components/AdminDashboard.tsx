@@ -18,6 +18,8 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<IssueStatus | ''>('');
   const [filterCategory, setFilterCategory] = useState<string | ''>('');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [viewerImage, setViewerImage] = useState<string | null>(null);
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -148,11 +150,30 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
     return { statusPie, categoryBar, priorityCounts, resolved, total };
   }, [issues]);
 
+  const topCategories = useMemo(() => {
+    return analyticsData.categoryBar.slice().sort((a,b) => b.count - a.count).slice(0,5);
+  }, [analyticsData]);
+
   const categories = useMemo(() => {
     const set = new Set<string>();
     issues.forEach(i => { if (i.category) set.add(i.category); });
     return Array.from(set).sort();
   }, [issues]);
+
+  // parse createdAt loosely to a Date. supports 'YYYY/MM/DD' and ISO-like strings.
+  const parseCreatedAt = (s?: string) => {
+    if (!s) return null;
+    // try ISO/standard
+    const tryIso = Date.parse(s);
+    if (!isNaN(tryIso)) return new Date(tryIso);
+    // try YYYY/MM/DD or YYYY-MM-DD
+    const m1 = s.match(/(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})/);
+    if (m1) return new Date(Number(m1[1]), Number(m1[2]) - 1, Number(m1[3]));
+    // try dd/mm/yyyy (common localized format)
+    const m2 = s.match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
+    if (m2) return new Date(Number(m2[3]), Number(m2[2]) - 1, Number(m2[1]));
+    return null;
+  };
 
   const stats = useMemo(() => {
     const resolved = analyticsData.resolved;
@@ -167,15 +188,26 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
   }, [issues, analyticsData]);
 
   const filteredIssues = useMemo(() => {
+    const start = startDate ? new Date(startDate + 'T00:00:00') : null;
+    const end = endDate ? new Date(endDate + 'T23:59:59') : null;
     return issues.filter(issue => {
       const matchSearch = (issue.pharmacistName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
                           (issue.mobileNumber || '').includes(searchTerm) ||
                           (issue.id || '').includes(searchTerm);
       const matchStatus = !filterStatus || issue.status === filterStatus;
       const matchCategory = !filterCategory || issue.category === filterCategory;
+
+      // date range filter
+      if ((start || end) && issue.createdAt) {
+        const dt = parseCreatedAt(issue.createdAt);
+        if (!dt) return false; // cannot parse date -> exclude
+        if (start && dt < start) return false;
+        if (end && dt > end) return false;
+      }
+
       return matchSearch && matchStatus && matchCategory;
     });
-  }, [issues, searchTerm, filterStatus]);
+  }, [issues, searchTerm, filterStatus, filterCategory, startDate, endDate]);
 
   const COLORS = ['#3FA9F5', '#00A99D', '#F7941D', '#8B5CF6', '#EC4899'];
 
@@ -217,6 +249,10 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
               <option value="">كل الحالات</option>
               {['جديدة', 'تحت المعالجة', 'بانتظار رد الصيدلي', 'تم الحل'].map(s => <option key={s} value={s}>{s}</option>)}
             </select>
+          </div>
+          <div className="flex gap-2 mt-2">
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={`flex-1 p-3 rounded-2xl text-sm font-black outline-none ${isDarkMode ? 'bg-black/20 border-white/10' : 'bg-gray-50 border-gray-100'}`} />
+            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={`w-40 p-3 rounded-2xl text-sm font-black outline-none ${isDarkMode ? 'bg-black/20 border-white/10' : 'bg-gray-50 border-gray-100'}`} />
           </div>
         </div>
 
@@ -318,6 +354,23 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
                        </PieChart>
                      </ResponsiveContainer>
                    </div>
+                 </div>
+
+                <div className="mt-6">
+                  <h5 className="font-black mb-3">أكثر 5 أنواع تكراراً</h5>
+                  <div className={`rounded-2xl p-4 ${isDarkMode ? 'bg-black/20' : 'bg-gray-50'}`}>
+                    <table className="w-full text-right text-sm">
+                      <thead className="text-xs opacity-60">
+                        <tr><th className="px-3 py-2">النوع</th><th className="px-3 py-2">العدد</th></tr>
+                      </thead>
+                      <tbody>
+                        {topCategories.map((c, i) => (
+                          <tr key={c.name} className="border-t"><td className="px-3 py-2 font-bold">{c.name}</td><td className="px-3 py-2">{c.count}</td></tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
                    <div className="w-full h-full">
                      <ResponsiveContainer width="100%" height="100%">
                        <BarChart data={analyticsData.categoryBar} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
@@ -325,7 +378,7 @@ const AdminDashboard: React.FC<Props> = ({ isDarkMode }) => {
                          <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                          <YAxis allowDecimals={false} />
                          <Tooltip />
-                         <Bar dataKey="count" fill="#3FA9F5" />
+                         <Bar dataKey="count" fill="#3FA9F5" onClick={(d:any) => { if (d && d.payload && d.payload.name) setFilterCategory(d.payload.name); }} />
                        </BarChart>
                      </ResponsiveContainer>
                    </div>
